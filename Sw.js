@@ -1,11 +1,11 @@
-const CACHE_NAME = 'kara-voice-v1';
+const CACHE_NAME = "kara-voice-v1";
 const ASSETS = [
-  './',
-  './index.html',
-  './manifest.json',
-  './icon-192.jpg',
-  './icon-512.png',
-  './KARAVOICE_ROUGE_ET_VERT.jpg'
+  "./",
+  "./index.html",
+  "./manifest.json",
+  "./icon-192.png",
+  "./icon-512.png",
+  "./KARAVOICE ROUGE ET VERT.jpg"
 ];
 
 self.addEventListener('install', (e) => {
@@ -24,20 +24,9 @@ self.addEventListener('activate', (e) => {
   self.clients.claim();
 });
 
+// CETTE PARTIE MANQUE CHEZ TOI - OBLIGATOIRE POUR INSTALLER
 self.addEventListener('fetch', (e) => {
-  // Ne pas cacher les blob: (videos locales)
-  if (e.request.url.startsWith('blob:')) return;
   e.respondWith(
-    caches.match(e.request).then(cached => {
-      if (cached) return cached;
-      return fetch(e.request).then(res => {
-        // cache dynamique pour les petites ressources
-        if (res.ok && e.request.method === 'GET' && e.request.url.startsWith(self.location.origin)) {
-          const clone = res.clone();
-          caches.open(CACHE_NAME).then(c => c.put(e.request, clone));
-        }
-        return res;
-      }).catch(() => cached);
-    })
+    caches.match(e.request).then(res => res || fetch(e.request))
   );
 });
