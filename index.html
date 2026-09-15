@@ -47,7 +47,7 @@ header {
   z-index:5;
   border-bottom:2px solid #283347;
 }
-.logo-title { display:flex; align-items:center; gap:20px; flex-wrap:wrap; }
+.logo-title { display:flex; align-items:center; gap:200px; flex-wrap:wrap; }
 .micro-logo {
   height:80px; width:auto; max-width:300px;
   object-fit:cover; border-radius:16px;
@@ -55,7 +55,7 @@ header {
   flex-shrink:0;
 }
 .kara-title {
-  font-size:60px; font-weight:900; letter-spacing:1px;
+  font-size:85px; font-weight:900; letter-spacing:1px;
   display:flex; align-items:baseline; gap:4px;
   font-family:Impact,'Arial Black',Segoe UI,sans-serif;
 }
@@ -253,9 +253,14 @@ textarea {
 
 <script>
 /* ----- DONNÉES ET ÉTAT ----- */
-const defaultSongs=[{"num":1,"artist":"ANDRE VERCHUREN","title":"Tu es le chou-chou de mon cœur"},{"num":2,"artist":"ANNIE CORDY","title":"La bonne du cure"},{"num":3,"artist":"BARBARA","title":"L'aigle noir"}];
+const defaultSongs=[];
 let stored = localStorage.getItem("karabox_songs");
 let songs = stored ? JSON.parse(stored) : defaultSongs;
+// Migration : si ancienne liste de démo de 3 titres, on vide pour partir propre
+if(songs.length===3 && songs.some(s=>s.artist && s.artist.includes("VERCHUREN"))){
+  songs = [];
+  localStorage.removeItem("karabox_songs");
+}
 let fileList = [];
 let currentUrl = null;
 let dirHandle = null;
@@ -346,7 +351,11 @@ function render() {
   count.textContent = arr.length + " chanson" + (arr.length > 1 ? "s" : "");
   list.innerHTML = "";
   if (!arr.length) {
-    list.innerHTML = '<tr><td colspan="4"><div class="empty">Aucune chanson trouvée.</div></td></tr>';
+    if (!q && songs.length===0) {
+      list.innerHTML = '<tr><td colspan="4"><div class="empty">📋 Aucune liste chargée<br><br>Clique sur <strong>📋 Import liste</strong> pour coller ta liste Excel<br>ou <strong>📁 Dossier MP4</strong> pour commencer</div></td></tr>';
+    } else {
+      list.innerHTML = '<tr><td colspan="4"><div class="empty">Aucune chanson trouvée.</div></td></tr>';
+    }
     return;
   }
   for (const s of arr) {
@@ -377,7 +386,7 @@ function findMatchingFile(s) {
   });
 }
 
-function playSong(s) {
+async function playSong(s) {
   let file = findMatchingFile(s);
   if (!file) {
     alert("Fichier MP4 introuvable pour :\n" + s.artist + " - " + s.title + "\n\nSélectionnez le dossier contenant vos fichiers vidéo.");
@@ -389,14 +398,32 @@ function playSong(s) {
   now.textContent = "▶ " + s.artist + " — " + s.title;
   videoBox.style.display = "block";
   document.body.classList.add("playing");
-  video.play().catch(() => {});
+  
+  try{ video.play(); }catch(e){}
+
+  // --- VRAI PLEIN ECRAN TOTAL (prend toute la page) ---
+  try{
+    if(videoBox.requestFullscreen){
+      await videoBox.requestFullscreen();
+    } else if(document.documentElement.requestFullscreen){
+      await document.documentElement.requestFullscreen();
+    }
+  }catch(e){
+    console.log("Plein écran bloqué, on reste en écran noir simple", e);
+  }
 }
 
-function exitCinema(){
+async function exitCinema(){
   document.body.classList.remove("playing");
   video.pause();
-  // on garde la videoBox visible en mode normal si on veut, ou on la cache
-  // videoBox.style.display = "none";
+  
+  // Sortir du vrai plein écran si on y est
+  try{
+    if(document.fullscreenElement){
+      await document.exitFullscreen();
+    }
+  }catch(e){}
+  
   scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -500,6 +527,18 @@ closeCinema.onclick = exitCinema;
 video.addEventListener('ended', exitCinema);
 document.addEventListener('keydown', (e)=>{
   if(e.key==='Escape' && document.body.classList.contains('playing')) exitCinema();
+});
+// Si l'utilisateur quitte le plein écran avec Echap du navigateur
+document.addEventListener('fullscreenchange', ()=>{
+  if(!document.fullscreenElement && document.body.classList.contains('playing')){
+    // On attend 100ms pour ne pas confliquer avec notre propre exit
+    setTimeout(()=>{
+      if(!document.fullscreenElement){
+        document.body.classList.remove("playing");
+        video.pause();
+      }
+    },100);
+  }
 });
 
 render();
