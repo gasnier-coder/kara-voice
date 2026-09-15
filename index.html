@@ -122,6 +122,65 @@ video { width:100%; max-height:68vh; border-radius:12px; background:#000; }
 .now { padding:12px 8px 10px; font-weight:800; font-size:26px; color:var(--neon-green); text-shadow:0 0 8px rgba(0,255,102,0.4); }
 .hint { font-size:16px; color:var(--m); padding:8px; }
 
+/* ----- MODE CINEMA - ECRAN NOIR PENDANT LECTURE ----- */
+body.playing { overflow:hidden; background:#000 !important; }
+body.playing header,
+body.playing .status,
+body.playing table,
+body.playing #pasteModal { display:none !important; }
+body.playing main { max-width:none; padding:0; margin:0; }
+body.playing #videoBox {
+  display:flex !important;
+  flex-direction:column;
+  position:fixed;
+  inset:0;
+  width:100vw;
+  height:100vh;
+  margin:0;
+  border-radius:0;
+  border:none;
+  background:#000;
+  box-shadow:none;
+  z-index:9999;
+  padding:0;
+  justify-content:center;
+  align-items:center;
+}
+body.playing #videoBox .now {
+  position:absolute;
+  top:20px; left:20px; right:70px;
+  z-index:2;
+  font-size:28px;
+  background:rgba(0,0,0,0.6);
+  border-radius:10px;
+  padding:10px 16px;
+}
+body.playing #videoBox .hint { display:none; }
+body.playing #video {
+  width:100vw;
+  height:100vh;
+  max-height:100vh;
+  border-radius:0;
+  object-fit:contain;
+  background:#000;
+}
+#closeCinema {
+  display:none;
+  position:absolute;
+  top:15px; right:15px;
+  z-index:10;
+  background:rgba(255,51,75,0.9);
+  color:#fff;
+  border:none;
+  border-radius:50%;
+  width:50px; height:50px;
+  font-size:28px;
+  font-weight:900;
+  cursor:pointer;
+  box-shadow:0 0 15px rgba(255,51,75,0.6);
+}
+body.playing #closeCinema { display:flex; align-items:center; justify-content:center; }
+
 /* =========================================================
    5. FENÊTRE D'IMPORT
    ========================================================= */
@@ -186,7 +245,7 @@ textarea {
   </div>
 </div></div>
 
-<div id="videoBox"><div class="now" id="now"></div><video id="video" controls></video><div class="hint">Les vidéos restent sur mon PC : aucun fichier n'est envoyé sur Internet.</div></div>
+<div id="videoBox"><button id="closeCinema" title="Fermer (Echap)">✕</button><div class="now" id="now"></div><video id="video" controls></video><div class="hint">Les vidéos restent sur mon PC : aucun fichier n'est envoyé sur Internet. Echap pour quitter l'écran noir.</div></div>
 <div class="status"><span id="count"></span><span id="folderStatus">Aucun dossier MP4 sélectionné</span></div>
 <table><thead><tr><th>N°</th><th>INTERPRÈTE</th><th>TITRE</th><th></th></tr></thead><tbody id="list"></tbody></table>
 </main>
@@ -263,7 +322,15 @@ function playSong(s) {
   video.src = currentUrl;
   now.textContent = "▶ " + s.artist + " — " + s.title;
   videoBox.style.display = "block";
+  document.body.classList.add("playing");
   video.play().catch(() => {});
+}
+
+function exitCinema(){
+  document.body.classList.remove("playing");
+  video.pause();
+  // on garde la videoBox visible en mode normal si on veut, ou on la cache
+  // videoBox.style.display = "none";
   scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -313,6 +380,13 @@ folder.onchange = e => {
   folderStatus.textContent = fileList.length + " vidéo(s) chargée(s)";
   render();
 };
+
+/* ----- MODE CINEMA ----- */
+closeCinema.onclick = exitCinema;
+video.addEventListener('ended', exitCinema);
+document.addEventListener('keydown', (e)=>{
+  if(e.key==='Escape' && document.body.classList.contains('playing')) exitCinema();
+});
 
 render();
 
