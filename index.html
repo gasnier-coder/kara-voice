@@ -1,3 +1,15 @@
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KARA VOICE</title>
+
+  <!-- AJOUTE CES 2 LIGNES - C'EST ÇA QUI MANQUE -->
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#ff0000">
+
+  <!-- ton css etc -->
+</head>
+
 <!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#00ff66">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -595,4 +607,14 @@ if ('serviceWorker' in navigator) {
       .catch(err => console.log('SW erreur', err));
   });
 }
+  <!-- AJOUTE ÇA AUSSI - JUSTE AVANT </body> -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js')
+        .then(() => console.log('SW OK'))
+        .catch(e => console.log('SW erreur', e));
+    }
+  </script>
+</body>
+</html>
 </script></body></html>
