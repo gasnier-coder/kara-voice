@@ -228,7 +228,8 @@ textarea {
 
   <div class="header-controls">
     <input id="search" type="search" placeholder="🔎 Tapez un N°">
-    <label class="filelabel">📁 Dossier MP4<input id="folder" type="file" webkitdirectory directory multiple></label>
+    <button class="filelabel" id="folderBtn">📁 Dossier MP4</button>
+    <input id="folder" type="file" webkitdirectory directory multiple style="display:none">
     <button class="blue" id="openPasteBtn">📋 Import liste</button>
     <button class="secondary" id="fullscreenBtn">🖥 Plein écran</button>
   </div>
@@ -257,8 +258,73 @@ let stored = localStorage.getItem("karabox_songs");
 let songs = stored ? JSON.parse(stored) : defaultSongs;
 let fileList = [];
 let currentUrl = null;
+let dirHandle = null;
 
 function saveSongs() { localStorage.setItem("karabox_songs", JSON.stringify(songs)); }
+
+// ----- STOCKAGE DOSSIER PERSISTANT (IndexedDB) -----
+const IDB_DB = 'kara-voice';
+const IDB_STORE = 'handles';
+function idbOpen(){
+  return new Promise((res,rej)=>{
+    const r = indexedDB.open(IDB_DB,1);
+    r.onupgradeneeded = ()=> r.result.createObjectStore(IDB_STORE);
+    r.onsuccess = ()=> res(r.result);
+    r.onerror = ()=> rej(r.error);
+  });
+}
+async function saveDirHandle(handle){
+  try{
+    const db = await idbOpen();
+    await new Promise((res,rej)=>{
+      const tx = db.transaction(IDB_STORE,'readwrite');
+      tx.objectStore(IDB_STORE).put(handle,'dir');
+      tx.oncomplete = res; tx.onerror = ()=>rej(tx.error);
+    });
+    localStorage.setItem('kara_dir_name', handle.name);
+  }catch(e){ console.log('IDB save fail',e); }
+}
+async function getDirHandle(){
+  try{
+    const db = await idbOpen();
+    const handle = await new Promise((res,rej)=>{
+      const tx = db.transaction(IDB_STORE,'readonly');
+      const rq = tx.objectStore(IDB_STORE).get('dir');
+      rq.onsuccess = ()=>res(rq.result);
+      rq.onerror = ()=>rej(rq.error);
+    });
+    return handle || null;
+  }catch{ return null; }
+}
+async function verifyPermission(handle, readWrite=false){
+  if(!handle) return false;
+  const opts = { mode: readWrite?'readwrite':'read' };
+  if((await handle.queryPermission(opts)) === 'granted') return true;
+  if((await handle.requestPermission(opts)) === 'granted') return true;
+  return false;
+}
+async function loadFilesFromHandle(handle){
+  const files=[];
+  try{
+    for await (const entry of handle.values()){
+      if(entry.kind==='file'){
+        if(/\.(mp4|m4v|mov|mkv)$/i.test(entry.name)){
+          const f = await entry.getFile();
+          // on garde le handle FileSystemFileHandle pour compat, mais on stocke File
+          files.push(f);
+        }
+      } else if(entry.kind==='directory'){
+        // scan 1 niveau de sous-dossiers
+        for await (const sub of entry.values()){
+          if(sub.kind==='file' && /\.(mp4|m4v|mov|mkv)$/i.test(sub.name)){
+            files.push(await sub.getFile());
+          }
+        }
+      }
+    }
+  }catch(e){ console.log('scan error',e); }
+  return files;
+}
 
 const norm = s => s ? s.toLowerCase()
   .replace(/œ/g, "oe").replace(/æ/g, "ae")
@@ -375,11 +441,59 @@ fullscreenBtn.onclick = () => {
 };
 
 search.oninput = render;
+
+// Fallback input webkitdirectory
 folder.onchange = e => {
   fileList = Array.from(e.target.files).filter(f => /\.(mp4|m4v|mov|mkv)$/i.test(f.name));
-  folderStatus.textContent = fileList.length + " vidéo(s) chargée(s)";
+  folderStatus.textContent = fileList.length + " vidéo(s) chargée(s) - sélection temporaire";
   render();
 };
+
+// Nouveau bouton dossier avec persistence
+folderBtn.onclick = async () => {
+  // Si API File System Access dispo
+  if(window.showDirectoryPicker){
+    try{
+      const handle = await window.showDirectoryPicker({ mode:'read' });
+      dirHandle = handle;
+      const ok = await verifyPermission(handle);
+      if(!ok){ folderStatus.textContent = "Permission refusée"; return; }
+      await saveDirHandle(handle);
+      const files = await loadFilesFromHandle(handle);
+      fileList = files;
+      folderStatus.textContent = `${fileList.length} vidéo(s) - ${handle.name} (mémorisé ✓)`;
+      render();
+      return;
+    }catch(err){
+      if(err.name!=='AbortError') console.log(err);
+      // si annulé, on ne fait rien, sinon fallback
+      if(err.name!=='AbortError') folder.click();
+      return;
+    }
+  }
+  // Fallback ancien navigateur / mobile
+  folder.click();
+};
+
+/* ----- RESTAURATION AUTOMATIQUE AU DEMARRAGE ----- */
+async function tryRestoreFolder(){
+  const handle = await getDirHandle();
+  if(!handle) return;
+  const perm = await verifyPermission(handle);
+  if(!perm){
+    const name = localStorage.getItem('kara_dir_name')||'dossier précédent';
+    folderStatus.textContent = `Dossier ${name} trouvé - cliquez sur 📁 pour autoriser`;
+    return;
+  }
+  dirHandle = handle;
+  const files = await loadFilesFromHandle(handle);
+  if(files.length){
+    fileList = files;
+    folderStatus.textContent = `${fileList.length} vidéo(s) - ${handle.name} restauré automatiquement ✓`;
+    render();
+  }
+}
+tryRestoreFolder();
 
 /* ----- MODE CINEMA ----- */
 closeCinema.onclick = exitCinema;
